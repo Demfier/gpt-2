@@ -57,9 +57,9 @@ def evaluate_model(model_name='117M', seed=None, batch_size=1):
             ppl_2 = []
             ppl_3 = []
             ppl_4 = []
-            for text in (load_sentences('{}{}'.format(data_path, file))):
-                encoded_tokens = enc.encode(text.strip())
-                encoded_tokens.append(eos_token)
+            for text in (load_sentences('{}{}'.format(data_path, file))[:10]):
+                encoded_tokens = [eos_token]
+                encoded_tokens += enc.encode(text.strip())
                 num_tokens = len(encoded_tokens)
                 num_words = len(text.split(' '))
                 log_probs = sess.run(probs, feed_dict={
