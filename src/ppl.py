@@ -60,6 +60,7 @@ def evaluate_model(model_name='117M', seed=None, batch_size=1):
             for text in (load_sentences('{}{}'.format(data_path, file))):
                 encoded_tokens = [eos_token]
                 encoded_tokens += enc.encode(text.strip())
+                encoded_tokens.append(eos_token)
                 num_tokens = len(encoded_tokens)
                 num_words = len(text.split(' '))
 
@@ -78,10 +79,9 @@ def evaluate_model(model_name='117M', seed=None, batch_size=1):
                         continue  # skip eos token
                     # Build NLL loss for PPL
                     nll.append(math.log(softmax_probs[idx-1][tkn], 2))
-
                 ppl_1.append(2 ** (-1 * np.mean(nll)))  # norm by #tokens
-                # -2 as discarding eos token
-                ppl_2.append(2 ** (-1 * (np.sum(nll)/(num_tokens-2))))  # norm by #tokens-1
+                # -1 as discarding eos token
+                ppl_2.append(2 ** (-1 * (np.sum(nll)/(len(nll)-1))))  # norm by #tokens-1
                 ppl_3.append(2 ** (-1 * (np.sum(nll)/num_words)))  # norm by #words
 
             ppl_1 = np.mean(ppl_1)
