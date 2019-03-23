@@ -13,15 +13,16 @@ def test_sequence(*, hparams, X, length):
     def step(hparams, tokens, past=None):
         lm_output = model.model(hparams=hparams, X=tokens,
                                 past=past, reuse=tf.AUTO_REUSE)
-        logits = lm_output['logits'][:, :, :hparams.n_vocab][0]
-        logits = tf.nn.softmax(logits)
+        logits = lm_output['logits'][:, :, :hparams.n_vocab]  # [batch_size x num_tokens+1, vocab_size]
+        probs = tf.nn.softmax(logits)  # [batch_size x num_tokens+1, vocab_size]
         return {
             'logits': logits,
+            'probs': probs
         }
 
     with tf.name_scope('test_sequence'):
         context_output = step(hparams, X)
-        return context_output['logits']
+        return context_output
 
 
 def load_sentences(file_path):
@@ -40,7 +41,7 @@ def evaluate_model(model_name='117M', seed=None, batch_size=1):
     with tf.Session(graph=tf.Graph()) as sess:
         tokens = tf.placeholder(tf.int32, [batch_size, None])
 
-        probs = test_sequence(
+        context_output = test_sequence(
             hparams=hparams, X=tokens, length=tokens.shape[1])
 
         # Load pretrained model
@@ -56,22 +57,31 @@ def evaluate_model(model_name='117M', seed=None, batch_size=1):
             ppl_1 = []
             ppl_2 = []
             ppl_3 = []
-            ppl_4 = []
-            for text in (load_sentences('{}{}'.format(data_path, file))[:10]):
+            for text in (load_sentences('{}{}'.format(data_path, file))):
                 encoded_tokens = [eos_token]
                 encoded_tokens += enc.encode(text.strip())
                 num_tokens = len(encoded_tokens)
                 num_words = len(text.split(' '))
-                log_probs = sess.run(probs, feed_dict={
+
+                lm_outputs = sess.run(context_output, feed_dict={
                     tokens: [encoded_tokens for _ in range(batch_size)]})
+                logits = lm_outputs['logits']
+
+                # Ideally should be looping over all the batch elements but
+                # currently just working with batch_size=1
+                softmax_probs = lm_outputs['probs'][0]
 
                 nll = []
-                for idx, token_logit in enumerate(log_probs):
+                # print(log_probs)
+                for idx, tkn in enumerate(encoded_tokens):
+                    if idx == 0:
+                        continue  # skip eos token
                     # Build NLL loss for PPL
-                    nll.append(math.log(token_logit[encoded_tokens[idx]], 2))
+                    nll.append(math.log(softmax_probs[idx-1][tkn], 2))
 
                 ppl_1.append(2 ** (-1 * np.mean(nll)))  # norm by #tokens
-                ppl_2.append(2 ** (-1 * (np.sum(nll)/(num_tokens-1))))  # norm by #tokens-1
+                # -2 as discarding eos token
+                ppl_2.append(2 ** (-1 * (np.sum(nll)/(num_tokens-2))))  # norm by #tokens-1
                 ppl_3.append(2 ** (-1 * (np.sum(nll)/num_words)))  # norm by #words
 
             ppl_1 = np.mean(ppl_1)
@@ -84,5 +94,5 @@ def evaluate_model(model_name='117M', seed=None, batch_size=1):
 
 
 if __name__ == '__main__':
-    with open('corpus_ppls_1.pkl', 'wb') as f:
+    with open('corpus_ppls.pkl', 'wb') as f:
         pickle.dump(evaluate_model(), f)
